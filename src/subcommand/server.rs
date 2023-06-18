@@ -89,32 +89,6 @@ impl Display for StaticHtml {
   }
 }
 
-#[derive(Serialize)]
-pub(crate) struct TransactionJson {
-  blockhash: Option<BlockHash>,
-  chain: Chain,
-  inscription: Option<InscriptionId>,
-  transaction: Transaction,
-  txid: Txid,
-}
-
-impl TransactionJson {
-  pub(crate) fn new(
-    transaction: Transaction,
-    blockhash: Option<BlockHash>,
-    inscription: Option<InscriptionId>,
-    chain: Chain,
-  ) -> Self {
-    Self {
-      txid: transaction.txid(),
-      blockhash,
-      chain,
-      inscription,
-      transaction,
-    }
-  }
-}
-
 use chrono::serde::ts_seconds_option;
 #[derive(Serialize)]
 pub(crate) struct InscriptionJson {
@@ -131,51 +105,6 @@ pub(crate) struct InscriptionJson {
   satpoint: SatPoint,
   #[serde(with = "ts_seconds_option")]
   timestamp: Option<DateTime<Utc>>,
-}
-
-#[derive(Serialize)]
-pub(crate) struct OutputJson {
-  outpoint: OutPoint,
-  list: Option<List>,
-  chain: Chain,
-  output: TxOut,
-  inscriptions: Vec<InscriptionId>,
-}
-
-impl OutputJson {
-  pub(crate) fn new(
-    outpoint: OutPoint,
-    list: Option<List>,
-    chain: Chain,
-    output: TxOut,
-    inscriptions: Vec<InscriptionId>,
-  ) -> Self {
-    Self {
-      outpoint,
-      list,
-      chain,
-      output,
-      inscriptions,
-    }
-  }
-}
-
-#[derive(Serialize)]
-pub(crate) struct InputJson {
-  path: (u64, usize, usize),
-  input: TxIn,
-}
-
-impl InputJson {
-  pub(crate) fn new(
-    path: (u64, usize, usize),
-    input: TxIn,
-  ) -> Self {
-    Self {
-      path,
-      input,
-    }
-  }
 }
 
 #[derive(Debug, Parser)]
@@ -486,51 +415,6 @@ impl Server {
     Redirect::to(&format!("/sat/{sat}"))
   }
 
-  async fn output_json(
-    Extension(page_config): Extension<Arc<PageConfig>>,
-    Extension(index): Extension<Arc<Index>>,
-    Path(outpoint): Path<OutPoint>,
-  ) -> ServerResult<Json<OutputJson>> {
-    let list = if index.has_sat_index()? {
-      index.list(outpoint)?
-    } else {
-      None
-    };
-  
-    let output = if outpoint == OutPoint::null() || outpoint == unbound_outpoint() {
-      let mut value = 0;
-  
-      if let Some(List::Unspent(ranges)) = &list {
-        for (start, end) in ranges {
-          value += end - start;
-        }
-      }
-  
-      TxOut {
-        value,
-        script_pubkey: Script::new(),
-      }
-    } else {
-      index
-        .get_transaction(outpoint.txid)?
-        .ok_or_not_found(|| format!("output {outpoint}"))?
-        .output
-        .into_iter()
-        .nth(outpoint.vout as usize)
-        .ok_or_not_found(|| format!("output {outpoint}"))?
-    };
-  
-    let inscriptions = index.get_inscriptions_on_output(outpoint)?;
-  
-    Ok(Json(OutputJson::new(
-      outpoint,
-      list,
-      page_config.chain,
-      output,
-      inscriptions,
-    )))
-  }  
-
   async fn output(
     Extension(page_config): Extension<Arc<PageConfig>>,
     Extension(index): Extension<Arc<Index>>,
@@ -647,27 +531,6 @@ impl Server {
     Ok(
       BlockHtml::new(block, Height(height), Self::index_height(&index)?)
         .page(page_config, index.has_sat_index()?),
-    )
-  }
-
-  async fn transaction_json(
-    Extension(page_config): Extension<Arc<PageConfig>>,
-    Extension(index): Extension<Arc<Index>>,
-    Path(txid): Path<Txid>,
-  ) -> ServerResult<Json<TransactionJson>> {
-    let inscription = index.get_inscription_by_id(txid.into())?;
-
-    let blockhash = index.get_transaction_blockhash(txid)?;
-
-    Ok(
-      Json(TransactionJson::new(
-        index
-          .get_transaction(txid)?
-          .ok_or_not_found(|| format!("transaction {txid}"))?,
-        blockhash,
-        inscription.map(|_| txid.into()),
-        page_config.chain,
-      ))
     )
   }
 
@@ -840,33 +703,6 @@ impl Server {
     Ok(index.block_count()?.to_string())
   }
 
-<<<<<<< HEAD
-  async fn input_json(
-    Extension(page_config): Extension<Arc<PageConfig>>,
-    Extension(index): Extension<Arc<Index>>,
-    Path(path): Path<(u64, usize, usize)>,
-  ) -> ServerResult<Json<InputJson>> {
-    let not_found = || format!("input /{}/{}/{}", path.0, path.1, path.2);
-  
-    let block = index
-      .get_block_by_height(path.0)?
-      .ok_or_not_found(not_found)?;
-  
-    let transaction = block
-      .txdata
-      .into_iter()
-      .nth(path.1)
-      .ok_or_not_found(not_found)?;
-  
-    let input = transaction
-      .input
-      .into_iter()
-      .nth(path.2)
-      .ok_or_not_found(not_found)?;
-  
-    Ok(Json(InputJson::new(path, input)))
-  }  
-=======
   async fn block_height(Extension(index): Extension<Arc<Index>>) -> ServerResult<String> {
     Ok(
       index
@@ -905,7 +741,6 @@ impl Server {
         .to_string(),
     )
   }
->>>>>>> 47689f10e35454e9ccf6f189f7d0a7a97b920a3b
 
   async fn input(
     Extension(page_config): Extension<Arc<PageConfig>>,
