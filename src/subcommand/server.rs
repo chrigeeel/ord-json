@@ -248,7 +248,6 @@ impl Server {
         .route("/favicon.ico", get(Self::favicon))
         .route("/feed.xml", get(Self::feed))
         .route("/input/:block/:transaction/:input", get(Self::input))
-        .route("/api/:block/:transaction/:input", get(Self::input_json))
         .route("/inscription/:inscription_id", get(Self::inscription))
         .route("/api/inscription/:inscription_id", get(Self::inscription_json))
         .route("/inscriptions", get(Self::inscriptions))
@@ -256,7 +255,6 @@ impl Server {
         .route("/install.sh", get(Self::install_script))
         .route("/ordinal/:sat", get(Self::ordinal))
         .route("/output/:output", get(Self::output))
-        .route("/api/output/:output", get(Self::output_json))
         .route("/preview/:inscription_id", get(Self::preview))
         .route("/range/:start/:end", get(Self::range))
         .route("/rare.txt", get(Self::rare_txt))
@@ -266,7 +264,6 @@ impl Server {
         .route("/static/*path", get(Self::static_asset))
         .route("/status", get(Self::status))
         .route("/tx/:txid", get(Self::transaction))
-        .route("/api/tx/:txid", get(Self::transaction_json))
         .layer(Extension(index))
         .layer(Extension(page_config))
         .layer(Extension(Arc::new(config)))
@@ -842,6 +839,73 @@ impl Server {
   async fn block_count(Extension(index): Extension<Arc<Index>>) -> ServerResult<String> {
     Ok(index.block_count()?.to_string())
   }
+
+<<<<<<< HEAD
+  async fn input_json(
+    Extension(page_config): Extension<Arc<PageConfig>>,
+    Extension(index): Extension<Arc<Index>>,
+    Path(path): Path<(u64, usize, usize)>,
+  ) -> ServerResult<Json<InputJson>> {
+    let not_found = || format!("input /{}/{}/{}", path.0, path.1, path.2);
+  
+    let block = index
+      .get_block_by_height(path.0)?
+      .ok_or_not_found(not_found)?;
+  
+    let transaction = block
+      .txdata
+      .into_iter()
+      .nth(path.1)
+      .ok_or_not_found(not_found)?;
+  
+    let input = transaction
+      .input
+      .into_iter()
+      .nth(path.2)
+      .ok_or_not_found(not_found)?;
+  
+    Ok(Json(InputJson::new(path, input)))
+  }  
+=======
+  async fn block_height(Extension(index): Extension<Arc<Index>>) -> ServerResult<String> {
+    Ok(
+      index
+        .block_height()?
+        .ok_or_not_found(|| "blockheight")?
+        .to_string(),
+    )
+  }
+
+  async fn block_hash(Extension(index): Extension<Arc<Index>>) -> ServerResult<String> {
+    Ok(
+      index
+        .block_hash(None)?
+        .ok_or_not_found(|| "blockhash")?
+        .to_string(),
+    )
+  }
+
+  async fn block_hash_from_height(
+    Extension(index): Extension<Arc<Index>>,
+    Path(height): Path<u64>,
+  ) -> ServerResult<String> {
+    Ok(
+      index
+        .block_hash(Some(height))?
+        .ok_or_not_found(|| "blockhash")?
+        .to_string(),
+    )
+  }
+
+  async fn block_time(Extension(index): Extension<Arc<Index>>) -> ServerResult<String> {
+    Ok(
+      index
+        .block_time(index.block_height()?.ok_or_not_found(|| "blocktime")?)?
+        .unix_timestamp()
+        .to_string(),
+    )
+  }
+>>>>>>> 47689f10e35454e9ccf6f189f7d0a7a97b920a3b
 
   async fn input(
     Extension(page_config): Extension<Arc<PageConfig>>,
