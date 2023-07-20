@@ -209,7 +209,7 @@ impl Index {
         database
       }
       Err(_) => {
-        println("Failed to open database!");
+        println!("Failed to open database!");
 
         let database = Database::builder()
           .set_cache_size(db_cache_size)
