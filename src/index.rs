@@ -180,12 +180,16 @@ impl Index {
       .open(&path)
     {
       Ok(database) => {
+        println!("Database opened successfully, reading schema version");
+
         let schema_version = database
           .begin_read()?
           .open_table(STATISTIC_TO_COUNT)?
           .get(&Statistic::Schema.key())?
           .map(|x| x.value())
           .unwrap_or(0);
+
+        println!("Read schema version successfully");
 
         match schema_version.cmp(&SCHEMA_VERSION) {
           cmp::Ordering::Less =>
@@ -205,6 +209,8 @@ impl Index {
         database
       }
       Err(_) => {
+        println("Failed to open database!");
+
         let database = Database::builder()
           .set_cache_size(db_cache_size)
           .create(&path)?;
