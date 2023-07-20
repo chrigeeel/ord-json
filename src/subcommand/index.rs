@@ -43,7 +43,7 @@ impl Export {
 pub(crate) fn run(options: Options) -> Result {
   let index = Index::open(&options)?;
 
-  println!("updating index!")
+  println!("updating index!");
 
   index.update()?;
 
