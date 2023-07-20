@@ -154,6 +154,8 @@ impl Index {
       options.data_dir()?.join("index.redb")
     };
 
+    println!("db path {}", path);
+
     if let Err(err) = fs::create_dir_all(path.parent().unwrap()) {
       bail!(
         "failed to create data dir `{}`: {err}",
@@ -170,6 +172,7 @@ impl Index {
       }
     };
 
+    println!("Setting DB cache size to {} bytes", db_cache_size);
     log::info!("Setting DB cache size to {} bytes", db_cache_size);
 
     let database = match Database::builder()
@@ -238,6 +241,8 @@ impl Index {
         database
       }
     };
+
+    println!("got db!")
 
     let genesis_block_coinbase_transaction =
       options.chain().genesis_block().coinbase().unwrap().clone();
