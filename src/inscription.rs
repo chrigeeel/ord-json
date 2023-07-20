@@ -21,6 +21,13 @@ const PROTOCOL_ID: &[u8] = b"ord";
 const BODY_TAG: &[u8] = &[];
 const CONTENT_TYPE_TAG: &[u8] = &[1];
 
+#[derive(Debug, PartialEq, Clone)]
+pub(crate) enum Curse {
+  NotInFirstInput,
+  NotAtOffsetZero,
+  Reinscription,
+}
+
 #[derive(Debug, PartialEq, Clone, Serialize)]
 pub(crate) struct Inscription {
   body: Option<Vec<u8>>,
