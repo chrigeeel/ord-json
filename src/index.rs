@@ -154,7 +154,7 @@ impl Index {
       options.data_dir()?.join("index.redb")
     };
 
-    println!("db path {}", path);
+    println!("db path {}", path.display());
 
     if let Err(err) = fs::create_dir_all(path.parent().unwrap()) {
       bail!(
