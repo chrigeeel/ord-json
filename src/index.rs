@@ -242,7 +242,7 @@ impl Index {
       }
     };
 
-    println!("got db!")
+    println!("got db!");
 
     let genesis_block_coinbase_transaction =
       options.chain().genesis_block().coinbase().unwrap().clone();
