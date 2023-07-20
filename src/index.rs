@@ -20,6 +20,7 @@ use {
   std::collections::HashMap,
   std::io::{BufWriter, Write},
   std::sync::atomic::{self, AtomicBool},
+  serde::ser::{Serialize},
 };
 
 mod entry;
@@ -67,7 +68,7 @@ pub(crate) struct Index {
   reorged: AtomicBool,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Serialize)]
 pub(crate) enum List {
   Spent,
   Unspent(Vec<(u64, u64)>),
