@@ -107,6 +107,21 @@ pub(crate) struct InscriptionJson {
   timestamp: Option<DateTime<Utc>>,
 }
 
+#[derive(Serialize)]
+pub(crate) struct TransactionJson {
+  inscription: Option<InscriptionId>,
+}
+
+impl TransactionJson {
+  pub(crate) fn new(
+    inscription: Option<InscriptionId>,
+  ) -> Self {
+    Self {
+      inscription,
+    }
+  }
+}
+
 #[derive(Debug, Parser)]
 pub(crate) struct Server {
   #[clap(
@@ -197,6 +212,7 @@ impl Server {
         .route("/static/*path", get(Self::static_asset))
         .route("/status", get(Self::status))
         .route("/tx/:txid", get(Self::transaction))
+        .route("/api/tx/:txid", get(Self::transaction_json))
         .layer(Extension(index))
         .layer(Extension(page_config))
         .layer(Extension(Arc::new(config)))
@@ -559,6 +575,20 @@ impl Server {
         page_config.chain,
       )
       .page(page_config, index.has_sat_index()?),
+    )
+  }
+
+  async fn transaction_json(
+    Extension(page_config): Extension<Arc<PageConfig>>,
+    Extension(index): Extension<Arc<Index>>,
+    Path(txid): Path<Txid>,
+  ) -> ServerResult<Json<TransactionJson>> {
+    let inscription = index.get_inscription_by_id(txid.into())?;
+
+    Ok(
+      Json(TransactionJson::new(
+        inscription.map(|_| txid.into()),
+      ))
     )
   }
 
