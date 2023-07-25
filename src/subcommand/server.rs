@@ -11,14 +11,13 @@ use {
     PreviewUnknownHtml, PreviewVideoHtml, RangeHtml, RareTxt, SatHtml, TransactionHtml,
   },
   axum::{
-    Json,
     body,
     extract::{Extension, Path, Query},
     headers::UserAgent,
     http::{header, HeaderMap, HeaderValue, StatusCode, Uri},
     response::{IntoResponse, Redirect, Response},
     routing::get,
-    Router, TypedHeader,
+    Json, Router, TypedHeader,
   },
   axum_server::Handle,
   rust_embed::RustEmbed,
@@ -28,6 +27,7 @@ use {
     caches::DirCache,
     AcmeConfig,
   },
+  serde::Serialize,
   std::{cmp::Ordering, str},
   tokio_stream::StreamExt,
   tower_http::{
@@ -35,7 +35,6 @@ use {
     cors::{Any, CorsLayer},
     set_header::SetResponseHeaderLayer,
   },
-  serde::Serialize,
 };
 
 mod error;
@@ -109,16 +108,12 @@ pub(crate) struct InscriptionJson {
 
 #[derive(Serialize)]
 pub(crate) struct TransactionJson {
-  inscription: Option<InscriptionId>,
+  num: i64,
 }
 
 impl TransactionJson {
-  pub(crate) fn new(
-    inscription: Option<InscriptionId>,
-  ) -> Self {
-    Self {
-      inscription,
-    }
+  pub(crate) fn new(num: i64) -> Self {
+    Self { num }
   }
 }
 
@@ -197,7 +192,10 @@ impl Server {
         .route("/feed.xml", get(Self::feed))
         .route("/input/:block/:transaction/:input", get(Self::input))
         .route("/inscription/:inscription_id", get(Self::inscription))
-        .route("/api/inscription/:inscription_id", get(Self::inscription_json))
+        .route(
+          "/api/inscription/:inscription_id",
+          get(Self::inscription_json),
+        )
         .route("/inscriptions", get(Self::inscriptions))
         .route("/inscriptions/:from", get(Self::inscriptions_from))
         .route("/install.sh", get(Self::install_script))
@@ -583,13 +581,13 @@ impl Server {
     Extension(index): Extension<Arc<Index>>,
     Path(txid): Path<Txid>,
   ) -> ServerResult<Json<TransactionJson>> {
-    let inscription = index.get_inscription_by_id(txid.into())?;
+    let inscription_id = txid.into();
 
-    Ok(
-      Json(TransactionJson::new(
-        inscription.map(|_| txid.into()),
-      ))
-    )
+    let entry = index
+      .get_inscription_entry(inscription_id)?
+      .ok_or_not_found(|| format!("inscription {inscription_id}"))?;
+
+    Ok(Json(TransactionJson::new(entry.number)))
   }
 
   async fn status(Extension(index): Extension<Arc<Index>>) -> (StatusCode, &'static str) {
@@ -958,23 +956,22 @@ impl Server {
     let next = index.get_inscription_id_by_inscription_number(entry.number + 1)?;
 
     let response = InscriptionJson {
-        chain: page_config.chain,
-        genesis_fee: entry.fee,
-        genesis_height: entry.height,
-        inscription,
-        inscription_id,
-        next,
-        number: entry.number,
-        output,
-        previous,
-        sat: entry.sat,
-        satpoint,
-        timestamp: Some(timestamp(entry.timestamp)),
+      chain: page_config.chain,
+      genesis_fee: entry.fee,
+      genesis_height: entry.height,
+      inscription,
+      inscription_id,
+      next,
+      number: entry.number,
+      output,
+      previous,
+      sat: entry.sat,
+      satpoint,
+      timestamp: Some(timestamp(entry.timestamp)),
     };
 
     Ok(Json(response))
   }
-
 
   async fn inscription(
     Extension(page_config): Extension<Arc<PageConfig>>,
