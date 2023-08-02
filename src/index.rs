@@ -8,7 +8,7 @@ use {
   },
   super::*,
   crate::wallet::Wallet,
-  bitcoin::BlockHeader,
+  bitcoin::block::Header,
   bitcoincore_rpc::{json::GetBlockHeaderResult, Client},
   chrono::SubsecRound,
   indicatif::{ProgressBar, ProgressStyle},
@@ -18,7 +18,7 @@ use {
     TableDefinition, WriteTransaction,
   },
   std::collections::HashMap,
-  std::io::{BufWriter, Write},
+  std::io::{BufWriter, Read, Write},
   std::sync::atomic::{self, AtomicBool},
   serde::ser::{Serialize},
 };
@@ -172,7 +172,20 @@ impl Index {
       }
     };
 
-    println!("Setting DB cache size to {} bytes", db_cache_size);
+    if let Ok(mut file) = fs::OpenOptions::new().read(true).open(&path) {
+      // use cberner's quick hack to check the redb recovery bit
+      // https://github.com/cberner/redb/issues/639#issuecomment-1628037591
+      const MAGICNUMBER: [u8; 9] = [b'r', b'e', b'd', b'b', 0x1A, 0x0A, 0xA9, 0x0D, 0x0A];
+      const RECOVERY_REQUIRED: u8 = 2;
+
+      let mut buffer = [0; MAGICNUMBER.len() + 1];
+      file.read_exact(&mut buffer).unwrap();
+
+      if buffer[MAGICNUMBER.len()] & RECOVERY_REQUIRED != 0 {
+        println!("Index file {:?} needs recovery. This can take a long time, especially for the --index-sats index.", path);
+      }
+    }
+
     log::info!("Setting DB cache size to {} bytes", db_cache_size);
 
     let database = match Database::builder()
@@ -568,7 +581,7 @@ impl Index {
     }
   }
 
-  pub(crate) fn block_header(&self, hash: BlockHash) -> Result<Option<BlockHeader>> {
+  pub(crate) fn block_header(&self, hash: BlockHash) -> Result<Option<Header>> {
     self.client.get_block_header(&hash).into_option()
   }
 
@@ -2584,30 +2597,30 @@ mod tests {
         .push_opcode(opcodes::OP_FALSE)
         .push_opcode(opcodes::all::OP_IF)
         .push_slice(b"ord")
-        .push_slice(&[1])
+        .push_slice([1])
         .push_slice(b"text/plain;charset=utf-8")
-        .push_slice(&[])
+        .push_slice([])
         .push_slice(b"foo")
         .push_opcode(opcodes::all::OP_ENDIF)
         .push_opcode(opcodes::OP_FALSE)
         .push_opcode(opcodes::all::OP_IF)
         .push_slice(b"ord")
-        .push_slice(&[1])
+        .push_slice([1])
         .push_slice(b"text/plain;charset=utf-8")
-        .push_slice(&[])
+        .push_slice([])
         .push_slice(b"bar")
         .push_opcode(opcodes::all::OP_ENDIF)
         .push_opcode(opcodes::OP_FALSE)
         .push_opcode(opcodes::all::OP_IF)
         .push_slice(b"ord")
-        .push_slice(&[1])
+        .push_slice([1])
         .push_slice(b"text/plain;charset=utf-8")
-        .push_slice(&[])
+        .push_slice([])
         .push_slice(b"qix")
         .push_opcode(opcodes::all::OP_ENDIF)
         .into_script();
 
-      let witness = Witness::from_vec(vec![script.into_bytes(), Vec::new()]);
+      let witness = Witness::from_slice(&[script.into_bytes(), Vec::new()]);
 
       let txid = context.rpc_server.broadcast_tx(TransactionTemplate {
         inputs: &[(1, 0, 0)],
@@ -2691,30 +2704,30 @@ mod tests {
         .push_opcode(opcodes::OP_FALSE)
         .push_opcode(opcodes::all::OP_IF)
         .push_slice(b"ord")
-        .push_slice(&[1])
+        .push_slice([1])
         .push_slice(b"text/plain;charset=utf-8")
-        .push_slice(&[])
+        .push_slice([])
         .push_slice(b"foo")
         .push_opcode(opcodes::all::OP_ENDIF)
         .push_opcode(opcodes::OP_FALSE)
         .push_opcode(opcodes::all::OP_IF)
         .push_slice(b"ord")
-        .push_slice(&[1])
+        .push_slice([1])
         .push_slice(b"text/plain;charset=utf-8")
-        .push_slice(&[])
+        .push_slice([])
         .push_slice(b"bar")
         .push_opcode(opcodes::all::OP_ENDIF)
         .push_opcode(opcodes::OP_FALSE)
         .push_opcode(opcodes::all::OP_IF)
         .push_slice(b"ord")
-        .push_slice(&[1])
+        .push_slice([1])
         .push_slice(b"text/plain;charset=utf-8")
-        .push_slice(&[])
+        .push_slice([])
         .push_slice(b"qix")
         .push_opcode(opcodes::all::OP_ENDIF)
         .into_script();
 
-      let witness = Witness::from_vec(vec![script.into_bytes(), Vec::new()]);
+      let witness = Witness::from_slice(&[script.into_bytes(), Vec::new()]);
 
       let txid = context.rpc_server.broadcast_tx(TransactionTemplate {
         inputs: &[(1, 0, 0), (2, 0, 0), (3, 0, 0)],
@@ -2796,30 +2809,30 @@ mod tests {
         .push_opcode(opcodes::OP_FALSE)
         .push_opcode(opcodes::all::OP_IF)
         .push_slice(b"ord")
-        .push_slice(&[1])
+        .push_slice([1])
         .push_slice(b"text/plain;charset=utf-8")
-        .push_slice(&[])
+        .push_slice([])
         .push_slice(b"foo")
         .push_opcode(opcodes::all::OP_ENDIF)
         .push_opcode(opcodes::OP_FALSE)
         .push_opcode(opcodes::all::OP_IF)
         .push_slice(b"ord")
-        .push_slice(&[1])
+        .push_slice([1])
         .push_slice(b"text/plain;charset=utf-8")
-        .push_slice(&[])
+        .push_slice([])
         .push_slice(b"bar")
         .push_opcode(opcodes::all::OP_ENDIF)
         .push_opcode(opcodes::OP_FALSE)
         .push_opcode(opcodes::all::OP_IF)
         .push_slice(b"ord")
-        .push_slice(&[1])
+        .push_slice([1])
         .push_slice(b"text/plain;charset=utf-8")
-        .push_slice(&[])
+        .push_slice([])
         .push_slice(b"qix")
         .push_opcode(opcodes::all::OP_ENDIF)
         .into_script();
 
-      let witness = Witness::from_vec(vec![script.into_bytes(), Vec::new()]);
+      let witness = Witness::from_slice(&[script.into_bytes(), Vec::new()]);
 
       let txid = context.rpc_server.broadcast_tx(TransactionTemplate {
         inputs: &[(1, 0, 0)],
