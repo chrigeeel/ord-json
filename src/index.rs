@@ -419,7 +419,8 @@ impl Index {
       .next_back()
       .and_then(|result| result.ok())
       .map(|(height, _hash)| height.value() + 1)
-      .unwrap_or(0);
+      .unwrap_or(0)
+      - 1;
 
     Ok(blocks_indexed)
   }
