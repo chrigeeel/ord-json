@@ -211,6 +211,7 @@ impl Server {
         .route("/status", get(Self::status))
         .route("/tx/:txid", get(Self::transaction))
         .route("/api/tx/:txid", get(Self::transaction_json))
+        .route("/api/blocks_indexed", get(Self::blocks_indexed_json))
         .layer(Extension(index))
         .layer(Extension(page_config))
         .layer(Extension(Arc::new(config)))
@@ -574,6 +575,15 @@ impl Server {
       )
       .page(page_config, index.has_sat_index()?),
     )
+  }
+
+  async fn blocks_indexed_json(
+    Extension(page_config): Extension<Arc<PageConfig>>,
+    Extension(index): Extension<Arc<Index>>,
+  ) -> ServerResult<Json<u64>> {
+    let blocks_indexed = index.get_blocks_indexed()?;
+
+    Ok(Json(blocks_indexed))
   }
 
   async fn transaction_json(

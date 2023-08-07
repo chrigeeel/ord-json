@@ -17,10 +17,10 @@ use {
     Database, MultimapTable, MultimapTableDefinition, ReadableMultimapTable, ReadableTable, Table,
     TableDefinition, WriteTransaction,
   },
+  serde::ser::Serialize,
   std::collections::HashMap,
   std::io::{BufWriter, Read, Write},
   std::sync::atomic::{self, AtomicBool},
-  serde::ser::{Serialize},
 };
 
 mod entry;
@@ -408,6 +408,20 @@ impl Index {
 
   pub(crate) fn update(&self) -> Result {
     Updater::update(self)
+  }
+
+  pub(crate) fn get_blocks_indexed(&self) -> Result<u64> {
+    let rtx = self.database.begin_read()?;
+
+    let blocks_indexed = rtx
+      .open_table(HEIGHT_TO_BLOCK_HASH)?
+      .range(0..)?
+      .next_back()
+      .and_then(|result| result.ok())
+      .map(|(height, _hash)| height.value() + 1)
+      .unwrap_or(0);
+
+    Ok(blocks_indexed)
   }
 
   pub(crate) fn export(&self, filename: &String, include_addresses: bool) -> Result {
