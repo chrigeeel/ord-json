@@ -19,6 +19,7 @@ use {
     Database, MultimapTable, MultimapTableDefinition, ReadableMultimapTable, ReadableTable, Table,
     TableDefinition, WriteTransaction,
   },
+  serde::ser::Serialize,
   std::collections::HashMap,
   std::io::{BufWriter, Read, Write},
 };
@@ -58,7 +59,7 @@ define_table! { SAT_TO_SATPOINT, u64, &SatPointValue }
 define_table! { STATISTIC_TO_COUNT, u64, u64 }
 define_table! { WRITE_TRANSACTION_STARTING_BLOCK_COUNT_TO_TIMESTAMP, u64, u128 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Serialize)]
 pub enum List {
   Spent,
   Unspent(Vec<(u64, u64)>),
@@ -156,6 +157,8 @@ impl Index {
       options.data_dir()?.join("index.redb")
     };
 
+    println!("db path {}", path.display());
+
     if let Err(err) = fs::create_dir_all(path.parent().unwrap()) {
       bail!(
         "failed to create data dir `{}`: {err}",
@@ -193,12 +196,16 @@ impl Index {
       .open(&path)
     {
       Ok(database) => {
+        println!("Database opened successfully, reading schema version");
+
         let schema_version = database
           .begin_read()?
           .open_table(STATISTIC_TO_COUNT)?
           .get(&Statistic::Schema.key())?
           .map(|x| x.value())
           .unwrap_or(0);
+
+        println!("Read schema version successfully");
 
         match schema_version.cmp(&SCHEMA_VERSION) {
           cmp::Ordering::Less =>
@@ -218,6 +225,8 @@ impl Index {
         database
       }
       Err(_) => {
+        println!("Failed to open database!");
+
         let database = Database::builder()
           .set_cache_size(db_cache_size)
           .create(&path)?;
@@ -250,6 +259,8 @@ impl Index {
         database
       }
     };
+
+    println!("got db!");
 
     let genesis_block_coinbase_transaction =
       options.chain().genesis_block().coinbase().unwrap().clone();
@@ -420,6 +431,21 @@ impl Index {
         }
       }
     }
+  }
+
+  pub(crate) fn get_blocks_indexed(&self) -> Result<u64> {
+    let rtx = self.database.begin_read()?;
+
+    let blocks_indexed = rtx
+      .open_table(HEIGHT_TO_BLOCK_HASH)?
+      .range(0..)?
+      .next_back()
+      .and_then(|result| result.ok())
+      .map(|(height, _hash)| height.value() + 1)
+      .unwrap_or(0)
+      - 1;
+
+    Ok(blocks_indexed)
   }
 
   pub(crate) fn export(&self, filename: &String, include_addresses: bool) -> Result {

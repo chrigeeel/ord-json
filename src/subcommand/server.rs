@@ -20,7 +20,7 @@ use {
     http::{header, HeaderMap, HeaderValue, StatusCode, Uri},
     response::{IntoResponse, Redirect, Response},
     routing::get,
-    Router, TypedHeader,
+    Json, Router, TypedHeader,
   },
   axum_server::Handle,
   rust_embed::RustEmbed,
@@ -30,6 +30,7 @@ use {
     caches::DirCache,
     AcmeConfig,
   },
+  serde::Serialize,
   std::{cmp::Ordering, str, sync::Arc, sync::RwLock},
   tokio_stream::StreamExt,
   tower_http::{
@@ -97,6 +98,35 @@ impl PageContent for StaticHtml {
 impl Display for StaticHtml {
   fn fmt(&self, f: &mut Formatter) -> fmt::Result {
     f.write_str(self.html)
+  }
+}
+
+use chrono::serde::ts_seconds_option;
+#[derive(Serialize)]
+pub(crate) struct InscriptionJson {
+  chain: Chain,
+  genesis_fee: u64,
+  genesis_height: u64,
+  inscription: Inscription,
+  inscription_id: InscriptionId,
+  next: Option<InscriptionId>,
+  number: i64,
+  output: Option<TxOut>,
+  previous: Option<InscriptionId>,
+  sat: Option<Sat>,
+  satpoint: SatPoint,
+  #[serde(with = "ts_seconds_option")]
+  timestamp: Option<DateTime<Utc>>,
+}
+
+#[derive(Serialize)]
+pub(crate) struct TransactionJson {
+  num: i64,
+}
+
+impl TransactionJson {
+  pub(crate) fn new(num: i64) -> Self {
+    Self { num }
   }
 }
 
@@ -195,6 +225,10 @@ impl Server {
         .route("/feed.xml", get(Self::feed))
         .route("/input/:block/:transaction/:input", get(Self::input))
         .route("/inscription/:inscription_id", get(Self::inscription))
+        .route(
+          "/api/inscription/:inscription_id",
+          get(Self::inscription_json),
+        )
         .route("/inscriptions", get(Self::inscriptions))
         .route("/inscriptions/block/:n", get(Self::inscriptions_in_block))
         .route("/inscriptions/:from", get(Self::inscriptions_from))
@@ -211,6 +245,8 @@ impl Server {
         .route("/static/*path", get(Self::static_asset))
         .route("/status", get(Self::status))
         .route("/tx/:txid", get(Self::transaction))
+        .route("/api/tx/:txid", get(Self::transaction_json))
+        .route("/api/blocks_indexed", get(Self::blocks_indexed_json))
         .layer(Extension(index))
         .layer(Extension(page_config))
         .layer(Extension(Arc::new(config)))
@@ -617,6 +653,29 @@ impl Server {
     )
   }
 
+  async fn blocks_indexed_json(
+    Extension(page_config): Extension<Arc<PageConfig>>,
+    Extension(index): Extension<Arc<Index>>,
+  ) -> ServerResult<Json<u64>> {
+    let blocks_indexed = index.get_blocks_indexed()?;
+
+    Ok(Json(blocks_indexed))
+  }
+
+  async fn transaction_json(
+    Extension(page_config): Extension<Arc<PageConfig>>,
+    Extension(index): Extension<Arc<Index>>,
+    Path(txid): Path<Txid>,
+  ) -> ServerResult<Json<TransactionJson>> {
+    let inscription_id = txid.into();
+
+    let entry = index
+      .get_inscription_entry(inscription_id)?
+      .ok_or_not_found(|| format!("inscription {inscription_id}"))?;
+
+    Ok(Json(TransactionJson::new(entry.number)))
+  }
+
   async fn status(Extension(index): Extension<Arc<Index>>) -> (StatusCode, &'static str) {
     if index.is_unrecoverably_reorged() {
       (
@@ -944,6 +1003,59 @@ impl Server {
       Media::Unknown => Ok(PreviewUnknownHtml.into_response()),
       Media::Video => Ok(PreviewVideoHtml { inscription_id }.into_response()),
     }
+  }
+
+  async fn inscription_json(
+    Extension(page_config): Extension<Arc<PageConfig>>,
+    Extension(index): Extension<Arc<Index>>,
+    Path(inscription_id): Path<InscriptionId>,
+  ) -> Result<Json<InscriptionJson>, ServerError> {
+    let entry = index
+      .get_inscription_entry(inscription_id)?
+      .ok_or_not_found(|| format!("inscription {inscription_id}"))?;
+
+    let inscription = index
+      .get_inscription_by_id(inscription_id)?
+      .ok_or_not_found(|| format!("inscription {inscription_id}"))?;
+
+    let satpoint = index
+      .get_inscription_satpoint_by_id(inscription_id)?
+      .ok_or_not_found(|| format!("inscription {inscription_id}"))?;
+
+    let output = if satpoint.outpoint == unbound_outpoint() {
+      None
+    } else {
+      Some(
+        index
+          .get_transaction(satpoint.outpoint.txid)?
+          .ok_or_not_found(|| format!("inscription {inscription_id} current transaction"))?
+          .output
+          .into_iter()
+          .nth(satpoint.outpoint.vout.try_into().unwrap())
+          .ok_or_not_found(|| format!("inscription {inscription_id} current transaction output"))?,
+      )
+    };
+
+    let previous = index.get_inscription_id_by_inscription_number(entry.number - 1)?;
+
+    let next = index.get_inscription_id_by_inscription_number(entry.number + 1)?;
+
+    let response = InscriptionJson {
+      chain: page_config.chain,
+      genesis_fee: entry.fee,
+      genesis_height: entry.height,
+      inscription,
+      inscription_id,
+      next,
+      number: entry.number,
+      output,
+      previous,
+      sat: entry.sat,
+      satpoint,
+      timestamp: Some(timestamp(entry.timestamp)),
+    };
+
+    Ok(Json(response))
   }
 
   async fn inscription(
