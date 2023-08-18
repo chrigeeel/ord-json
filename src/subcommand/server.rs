@@ -241,7 +241,7 @@ impl Server {
         .route("/inscriptions/block/:n", get(Self::inscriptions_in_block))
         .route(
           "/api/inscriptions/block/:n",
-          get(Self::inscriptions_in_block),
+          get(Self::inscriptions_in_block_json),
         )
         .route("/inscriptions/:from", get(Self::inscriptions_from))
         .route("/inscriptions/:from/:n", get(Self::inscriptions_from_n))
