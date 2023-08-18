@@ -20,7 +20,7 @@ use {
     http::{header, HeaderMap, HeaderValue, StatusCode, Uri},
     response::{IntoResponse, Redirect, Response},
     routing::get,
-    Json, Router, TypedHeader,
+    Router, TypedHeader,
   },
   axum_server::Handle,
   rust_embed::RustEmbed,
@@ -103,11 +103,11 @@ impl Display for StaticHtml {
 
 use chrono::serde::ts_seconds_option;
 #[derive(Serialize)]
-pub(crate) struct InscriptionJson {
+pub(crate) struct InscriptionJsonCustom {
   chain: Chain,
   genesis_fee: u64,
   genesis_height: u64,
-  inscription: Inscription,
+  //Inscription: Inscription,
   inscription_id: InscriptionId,
   next: Option<InscriptionId>,
   number: i64,
@@ -122,11 +122,19 @@ pub(crate) struct InscriptionJson {
 #[derive(Serialize)]
 pub(crate) struct TransactionJson {
   num: i64,
+  sat: Option<Sat>,
+  timestamp: u32,
+  fee: u64,
 }
 
 impl TransactionJson {
-  pub(crate) fn new(num: i64) -> Self {
-    Self { num }
+  pub(crate) fn new(num: i64, sat: Option<Sat>, timestamp: u32, fee: u64) -> Self {
+    Self {
+      num,
+      sat,
+      timestamp,
+      fee,
+    }
   }
 }
 
@@ -231,6 +239,10 @@ impl Server {
         )
         .route("/inscriptions", get(Self::inscriptions))
         .route("/inscriptions/block/:n", get(Self::inscriptions_in_block))
+        .route(
+          "/api/inscriptions/block/:n",
+          get(Self::inscriptions_in_block),
+        )
         .route("/inscriptions/:from", get(Self::inscriptions_from))
         .route("/inscriptions/:from/:n", get(Self::inscriptions_from_n))
         .route("/install.sh", get(Self::install_script))
@@ -673,7 +685,12 @@ impl Server {
       .get_inscription_entry(inscription_id)?
       .ok_or_not_found(|| format!("inscription {inscription_id}"))?;
 
-    Ok(Json(TransactionJson::new(entry.number)))
+    Ok(Json(TransactionJson::new(
+      entry.number,
+      entry.sat,
+      entry.timestamp,
+      entry.fee,
+    )))
   }
 
   async fn status(Extension(index): Extension<Arc<Index>>) -> (StatusCode, &'static str) {
@@ -1009,7 +1026,7 @@ impl Server {
     Extension(page_config): Extension<Arc<PageConfig>>,
     Extension(index): Extension<Arc<Index>>,
     Path(inscription_id): Path<InscriptionId>,
-  ) -> Result<Json<InscriptionJson>, ServerError> {
+  ) -> Result<Json<InscriptionJsonCustom>, ServerError> {
     let entry = index
       .get_inscription_entry(inscription_id)?
       .ok_or_not_found(|| format!("inscription {inscription_id}"))?;
@@ -1040,11 +1057,11 @@ impl Server {
 
     let next = index.get_inscription_id_by_inscription_number(entry.number + 1)?;
 
-    let response = InscriptionJson {
+    let response = InscriptionJsonCustom {
       chain: page_config.chain,
       genesis_fee: entry.fee,
       genesis_height: entry.height,
-      inscription,
+      //inscription,
       inscription_id,
       next,
       number: entry.number,
@@ -1158,6 +1175,18 @@ impl Server {
       .page(page_config, index.has_sat_index()?)
       .into_response()
     })
+  }
+
+  async fn inscriptions_in_block_json(
+    Extension(page_config): Extension<Arc<PageConfig>>,
+    Extension(index): Extension<Arc<Index>>,
+    Extension(block_index_state): Extension<Arc<BlockIndexState>>,
+    Path(block_height): Path<u64>,
+  ) -> ServerResult<Json<Vec<InscriptionId>>> {
+    let inscriptions = index
+      .get_inscriptions_in_block(&block_index_state.block_index.read().unwrap(), block_height)?;
+
+    Ok(Json(inscriptions))
   }
 
   async fn inscriptions_from(
